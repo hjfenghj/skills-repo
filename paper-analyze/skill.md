@@ -96,6 +96,9 @@ PAPERS_DIR="${VAULT_ROOT}/20_Research/Papers"
 # 如果用户指定了输出文件夹，则 NOTE_PATH 直接使用该文件夹下的文件
 # 如果没有指定，则按原逻辑自动推断 DOMAIN 并保存到 PAPERS_DIR/DOMAIN/ 下
 CUSTOM_OUTPUT_DIR=""  # 从用户输入中解析，如果有的话
+
+# 设置 Skill 目录（使用 $HOME 实现跨用户、跨平台可移植）
+SKILL_DIR="$HOME/.claude/skills/paper-analyze"
 ```
 
 ## 步骤1：识别论文
@@ -266,7 +269,7 @@ DATE=$(grep -oP 'citation_date" content="\K[^"]*' /tmp/paper_analysis/arxiv_page
 ## 步骤4：复制图片到本地
 
 ```bash
-# 复制figures目录到目标位置
+# 复制figures目录到目标位置（注意：路径必须包含领域层和论文子目录层）
 cp /tmp/paper_analysis/*.{pdf,png,jpg,jpeg} "PAPERS_DIR/[DOMAIN]/[PAPER_TITLE]/images/" 2>/dev/null
 
 # 列出复制的内容
@@ -283,13 +286,37 @@ ls "PAPERS_DIR/[DOMAIN]/[PAPER_TITLE]/images/"
 
 如果没有指定输出文件夹，则按原逻辑自动推断领域。
 
+**【严格路径规则——不可违反】**
+
+笔记的保存路径必须严格遵循以下层级结构，任何一级都不可省略：
+
+```
+PAPERS_DIR / [领域] / [论文标题] / [未读][论文标题].md
+PAPERS_DIR / [领域] / [论文标题] / images/
+```
+
+具体来说，完整路径为：
+```
+20_Research/Papers/大模型/Vision_Transformers_Need_Registers/[未读]Vision_Transformers_Need_Registers.md
+                 ^^^^   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^   ^^^^
+                 领域层          论文子目录层              文件名
+```
+
+**禁止事项**：
+- ❌ 不得省略领域层级，例如写成 `Papers/Vision_Transformers_Need_Registers/[未读]...md`（缺少"大模型"层）
+- ❌ 不得省略论文子目录层，例如写成 `Papers/大模型/[未读]...md`（缺少论文标题子目录）
+- ❌ 不得将笔记直接放在 Papers 根目录下
+- ❌ 在写入文件前，必须先确认路径中包含领域名称，否则视为路径错误
+
+**写入前路径校验**：在用 Write 工具写入笔记前，必须检查目标路径是否匹配 `PAPERS_DIR / * / * / [未读]*.md` 的三层结构。如果路径层数不足，说明领域或论文子目录被遗漏，必须修正后才能写入。
+
 ```bash
 PAPERS_DIR="${VAULT_ROOT}/20_Research/Papers"
 PAPER_TITLE="[论文标题，空格替换为下划线]"
 
 if [ -n "$CUSTOM_OUTPUT_DIR" ]; then
     # 用户指定了输出文件夹，直接使用
-    NOTE_PATH="${PAPERS_DIR}/${CUSTOM_OUTPUT_DIR}/${PAPER_TITLE}.md"
+    NOTE_PATH="${PAPERS_DIR}/${CUSTOM_OUTPUT_DIR}/${PAPER_TITLE}/[未读]${PAPER_TITLE}.md"
     IMAGES_DIR="${PAPERS_DIR}/${CUSTOM_OUTPUT_DIR}/${PAPER_TITLE}/images"
     INDEX_PATH="${IMAGES_DIR}/index.md"
     # frontmatter 中的 domain 字段设为用户指定的文件夹名（取最后一级目录名）
@@ -304,10 +331,19 @@ else
     # - 否则 → 其他
 
     DOMAIN="[推断的领域]"
-    NOTE_PATH="${PAPERS_DIR}/${DOMAIN}/${PAPER_TITLE}.md"
+    NOTE_PATH="${PAPERS_DIR}/${DOMAIN}/${PAPER_TITLE}/[未读]${PAPER_TITLE}.md"
     IMAGES_DIR="${PAPERS_DIR}/${DOMAIN}/${PAPER_TITLE}/images"
     INDEX_PATH="${IMAGES_DIR}/index.md"
 fi
+```
+
+**路径校验示例**（写入前必须执行）：
+
+```bash
+# 检查路径层数：NOTE_PATH 相对于 PAPERS_DIR 应该有 3 层（领域/论文标题/文件名）
+# 正确：大模型/Vision_Transformers_Need_Registers/[未读]Vision_Transformers_Need_Registers.md
+# 错误：Vision_Transformers_Need_Registers/[未读]Vision_Transformers_Need_Registers.md（缺领域层）
+# 错误：大模型/[未读]Vision_Transformers_Need_Registers.md（缺论文子目录层）
 ```
 
 ### 5.2 笔记结构模板
@@ -768,7 +804,7 @@ $$\text{公式}$$
 **图片上传流程**：笔记写完后，按步骤 6 自动执行上传和替换，流程：
 1. 写笔记时先用本地路径 `images/xxx.pdf` 占位
 2. 从写好的笔记中提取实际引用的图片文件名
-3. 运行 `scripts/upload_images.py --files ...` 只上传引用的图片到 OSS
+3. 运行 `$SKILL_DIR/scripts/upload_images.py --files ...` 只上传引用的图片到 OSS
 4. 读取 `url_map.json`，用 Edit 工具替换笔记中的本地路径为 OSS URL
 5. 最终笔记中不保留任何本地路径引用
 
@@ -787,13 +823,13 @@ grep -oP 'images/[^)]+' "NOTE_PATH" | sed 's|images/||' | sort -u
 用上传脚本的 `--files` 参数只上传被引用的文件：
 
 ```bash
-python "C:/Users/daolin.Qi/.claude/skills/paper-analyze/scripts/upload_images.py" \
+python "$SKILL_DIR/scripts/upload_images.py" \
     --dir "IMAGES_DIR" \
     --files <引用的文件名列表> \
     --output "/tmp/paper_analysis/url_map.json"
 ```
 
-脚本位于 `C:\Users\daolin.Qi\.claude\skills\paper-analyze\scripts\upload_images.py`，功能：
+脚本位于 `$SKILL_DIR/scripts/upload_images.py`，功能：
 - 读取 PicGo 的阿里云 OSS 配置（`%APPDATA%/picgo/data.json`）
 - PDF 自动转 PNG（PyMuPDF, 200 DPI）再上传
 - PNG/JPG/JPEG 直接上传
@@ -836,7 +872,7 @@ python "C:/Users/daolin.Qi/.claude/skills/paper-analyze/scripts/upload_images.py
 ## 论文分析完成！
 
 **论文**：[[论文标题]] (arXiv:XXXX.XXXXX)
-**笔记位置**：[[20_Research/Papers/领域/论文标题.md]]
+**笔记位置**：[[20_Research/Papers/领域/论文标题/[未读]论文标题.md]]
 
 ---
 
@@ -964,7 +1000,7 @@ if [ -n "$CUSTOM_OUTPUT_DIR" ]; then
 fi
 
 # 执行完整流程
-python "scripts/generate_note.py" --paper-id "$PAPER_ID" --title "$TITLE" --authors "$AUTHORS" --domain "$DOMAIN" --language "$LANGUAGE" --output-dir "$CUSTOM_OUTPUT_DIR" || \
+python "$SKILL_DIR/scripts/generate_note.py" --paper-id "$PAPER_ID" --title "$TITLE" --authors "$AUTHORS" --domain "$DOMAIN" --language "$LANGUAGE" --output-dir "$CUSTOM_OUTPUT_DIR" || \
     echo "笔记生成脚本执行失败"
 ```
 
@@ -1006,3 +1042,4 @@ python "scripts/generate_note.py" --paper-id "$PAPER_ID" --title "$TITLE" --auth
 - **特殊领域强化** - 根据论文领域应用对应的强化规则
 - **公式要伴随解释** - 每个关键公式必须有符号表和自然语言翻译
 - **严禁编造** - 不编造论文未提及的实验数据、虚假相关论文、不存在的链接；无法确认的信息标注为"论文未提及"
+- **严格路径层级** - 笔记必须保存到 `Papers/领域/论文标题/[未读]论文标题.md`，领域层和论文子目录层都不可省略。写入前必须校验路径层数正确
