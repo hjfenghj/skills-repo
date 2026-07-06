@@ -81,16 +81,35 @@ def main():
         "analyzed": True
     }
 
-    # 安全构建节点索引（跳过无 id 的节点）
-    existing_nodes = {
-        node.get("id"): i
-        for i, node in enumerate(graph["nodes"])
-        if node.get("id")
-    }
-    if args.paper_id in existing_nodes:
-        graph["nodes"][existing_nodes[args.paper_id]].update(paper_node)
+    # 兼容 dict 格式和 list 格式的 nodes
+    nodes_container = graph.get("nodes", {})
+    if isinstance(nodes_container, dict):
+        # dict 格式：key 为 paper_id，value 为节点数据
+        node_key = f"arXiv:{args.paper_id}" if not args.paper_id.startswith("arXiv:") else args.paper_id
+        if node_key in nodes_container:
+            nodes_container[node_key].update(paper_node)
+        else:
+            nodes_container[node_key] = paper_node
+        graph["nodes"] = nodes_container
+        node_count = len(nodes_container)
+    elif isinstance(nodes_container, list):
+        # list 格式
+        existing_nodes = {
+            node.get("id"): i
+            for i, node in enumerate(nodes_container)
+            if isinstance(node, dict) and node.get("id")
+        }
+        if args.paper_id in existing_nodes:
+            nodes_container[existing_nodes[args.paper_id]].update(paper_node)
+        else:
+            nodes_container.append(paper_node)
+        graph["nodes"] = nodes_container
+        node_count = len(nodes_container)
     else:
-        graph["nodes"].append(paper_node)
+        # 未知格式，重新初始化为 dict
+        node_key = f"arXiv:{args.paper_id}" if not args.paper_id.startswith("arXiv:") else args.paper_id
+        graph["nodes"] = {node_key: paper_node}
+        node_count = 1
 
     if args.related:
         # 安全构建边索引（跳过无 source/target 的边）
@@ -120,12 +139,12 @@ def main():
 
     if args.language == "zh":
         print(f"图谱已更新: {graph_path}")
-        print(f"节点数: {len(graph['nodes'])}")
-        print(f"边数: {len(graph['edges'])}")
+        print(f"节点数: {node_count}")
+        print(f"边数: {len(graph.get('edges', []))}")
     else:
         print(f"Graph updated: {graph_path}")
-        print(f"Nodes: {len(graph['nodes'])}")
-        print(f"Edges: {len(graph['edges'])}")
+        print(f"Nodes: {node_count}")
+        print(f"Edges: {len(graph.get('edges', []))}")
 
 
 if __name__ == '__main__':
