@@ -397,13 +397,16 @@ def main():
         if not output_dir:
             output_dir = '其他' if args.language == 'zh' else 'Other'
         domain = os.path.basename(output_dir)
-        note_dir = os.path.join(papers_dir, output_dir)
+        # 笔记保存到 Papers/output_dir/paper_title/ 子目录下
+        note_dir = os.path.join(papers_dir, output_dir, paper_title_safe)
     else:
         # 按原逻辑自动推断领域
         domain = args.domain.strip('/\\').replace('..', '')
         if not domain:
             domain = '其他' if args.language == 'zh' else 'Other'
-        note_dir = os.path.join(papers_dir, domain)
+        # 笔记保存到 Papers/domain/paper_title/ 子目录下
+        note_dir = os.path.join(papers_dir, domain, paper_title_safe)
+
     os.makedirs(note_dir, exist_ok=True)
 
     note_path = os.path.join(note_dir, f"{paper_title_safe}.md")
