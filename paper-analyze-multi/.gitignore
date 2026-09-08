@@ -1,0 +1,4 @@
+# 本 skill 无独立配置文件（复用 ../paper-analyze/config/paper-analyze.env）
+# Python 缓存
+__pycache__/
+*.pyc
