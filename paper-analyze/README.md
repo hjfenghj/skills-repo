@@ -1,4 +1,4 @@
-# paper-analyze（可迁移版）
+# paper-analyze
 
 把单篇 arXiv 论文深度分析成**图文并茂的中文技术长文笔记**并写入 Obsidian，融合知乎技术解读风格与学术评分体系，自动上传图片到阿里云 OSS、更新知识图谱。
 
